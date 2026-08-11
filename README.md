@@ -1,0 +1,1 @@
+the StickyNote is a one time thing for each session so that you will be motivated to do stuff,if you restart your pc and or shut it down it will delete everything in it so becarfull and FINISH YOUR WORK
