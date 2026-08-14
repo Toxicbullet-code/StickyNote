@@ -17,11 +17,8 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            pkg_type: msi
           - os: macos-latest
-            pkg_type: dmg
           - os: ubuntu-latest
-            pkg_type: deb
 
     steps:
       - name: Checkout Code
@@ -39,14 +36,53 @@ jobs:
           javac -d out src/*.java
           jar cfe StickyNote.jar Main -C out .
 
-      - name: Generate Native Installer
+      # Windows (.msi)
+      - name: Generate Windows Installer
+        if: matrix.os == 'windows-latest'
         run: |
           mkdir -p dist
-          jpackage --type ${{ matrix.pkg_type }} --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
+          jpackage --type msi --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
+
+      # macOS (.dmg)
+      - name: Generate Mac Installer
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p dist
+          jpackage --type dmg --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
+
+      # Linux (.AppImage)
+      - name: Generate Linux AppImage
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # 1. Ask jpackage for raw app directory structure
+          jpackage --type app-image --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
+          
+          # 2. Setup standard AppDir metadata
+          mkdir -p dist/StickyNote/usr/share/applications
+          echo -e "[Desktop Entry]\nType=Application\nName=StickyNote\nExec=StickyNote\nIcon=utilities-notes\nCategories=Utility;" > dist/StickyNote/StickyNote.desktop
+          ln -s usr/share/applications/StickyNote.desktop dist/StickyNote/StickyNote.desktop
+          
+          mkdir -p dist/StickyNote/usr/share/icons/hicolor/256x256/apps
+          touch dist/StickyNote/StickyNote.png
+          ln -s usr/share/icons/hicolor/256x256/apps/StickyNote.png dist/StickyNote/StickyNote.png
+
+          echo -e '#!/bin/sh\nHERE="$(dirname "$(readlink -f "${0}")")"\nexec "$HERE/bin/StickyNote" "$@"' > dist/StickyNote/AppRun
+          chmod +x dist/StickyNote/AppRun
+
+          # 3. Use appimagetool to wrap into executable .AppImage
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          ./appimagetool-x86_64.AppImage --appimage-extract-and-run dist/StickyNote StickyNote-x86_64.AppImage
+
+          mkdir -p final_dist
+          mv StickyNote-x86_64.AppImage final_dist/
 
       - name: Upload Installers to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*.msi
+            dist/*.dmg
+            final_dist/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
