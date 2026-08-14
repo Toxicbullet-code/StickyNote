@@ -9,84 +9,99 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            artifact: StickyNote.msi
-          - os: macos-latest
-            artifact: StickyNote.dmg
-          - os: ubuntu-latest
-            artifact: StickyNote.AppImage
-
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
-
-      - name: Compile Java Code & Build JAR
-        run: |
+      - run: |
           mkdir out
           mkdir jar_input
           javac -d out src/*.java
           jar cfe jar_input/StickyNote.jar Main -C out .
-
-      # Windows (.msi)
-      - name: Build Windows Installer
-        if: matrix.os == 'windows-latest'
-        run: |
           mkdir dist
           jpackage --type msi --name StickyNote --input jar_input --main-jar StickyNote.jar --main-class Main --dest dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/*.msi
 
-      # macOS (.dmg)
-      - name: Build Mac Installer
-        if: matrix.os == 'macos-latest'
-        run: |
+  build-mac:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - run: |
+          mkdir out
+          mkdir jar_input
+          javac -d out src/*.java
+          jar cfe jar_input/StickyNote.jar Main -C out .
           mkdir dist
           jpackage --type dmg --name StickyNote --input jar_input --main-jar StickyNote.jar --main-class Main --dest dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-installer
+          path: dist/*.dmg
 
-      # Linux (.AppImage)
-      - name: Build Linux AppImage
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          # 1. Install missing runner system dependencies
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - run: |
+          mkdir out
+          mkdir jar_input
+          javac -d out src/*.java
+          jar cfe jar_input/StickyNote.jar Main -C out .
+          
           sudo apt-get update -qq
           sudo apt-get install -y file squashfs-tools desktop-file-utils
-
-          # 2. Build app directory via jpackage pointing strictly to jar_input directory
+          
           mkdir dist
           jpackage --type app-image --name StickyNote --input jar_input --main-jar StickyNote.jar --main-class Main --dest dist/
-
-          # 3. Create desktop entry, icon, and launcher inside AppDir
+          
           printf "[Desktop Entry]\nType=Application\nName=StickyNote\nExec=StickyNote\nIcon=StickyNote\nCategories=Utility;\n" > dist/StickyNote/StickyNote.desktop
-
           python3 -c "import base64; open('dist/StickyNote/StickyNote.png', 'wb').write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='))"
-
           printf '#!/bin/sh\nHERE="$(dirname "$(readlink -f "${0}")")"\nexec "$HERE/bin/StickyNote" "$@"\n' > dist/StickyNote/AppRun
           chmod +x dist/StickyNote/AppRun
-
-          # 4. Download and extract appimagetool
+          
           curl -sSL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
           chmod +x appimagetool
           ./appimagetool --appimage-extract
-
-          # 5. Pack AppImage using extracted squashfs payload
+          
           export ARCH=x86_64
           ./squashfs-root/AppRun -n dist/StickyNote dist/StickyNote.AppImage
           chmod +x dist/StickyNote.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-installer
+          path: dist/*.AppImage
 
-      - name: Upload Installer to Release
+  release:
+    needs: [build-windows, build-mac, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          merge-multiple: true
+
+      - name: Upload All to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ matrix.artifact }}
+          files: all-artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
