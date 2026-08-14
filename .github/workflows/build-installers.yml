@@ -57,39 +57,39 @@ jobs:
       - name: Build Linux AppImage
         if: matrix.os == 'ubuntu-latest'
         run: |
-          # 1. Create app directory via jpackage
+          # 1. Create app directory structure via jpackage
           jpackage --type app-image --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
-          
-          # 2. Generate valid desktop launcher entry without indentation
-          mkdir -p dist/StickyNote/usr/share/applications
-          echo "[Desktop Entry]" > dist/StickyNote/StickyNote.desktop
-          echo "Type=Application" >> dist/StickyNote/StickyNote.desktop
-          echo "Name=StickyNote" >> dist/StickyNote/StickyNote.desktop
-          echo "Exec=StickyNote" >> dist/StickyNote/StickyNote.desktop
-          echo "Icon=StickyNote" >> dist/StickyNote/StickyNote.desktop
-          echo "Categories=Utility;" >> dist/StickyNote/StickyNote.desktop
-          ln -s usr/share/applications/StickyNote.desktop dist/StickyNote/StickyNote.desktop
 
-          # 3. Create icon file
-          mkdir -p dist/StickyNote/usr/share/icons/hicolor/256x256/apps
-          echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVUVOYII=" | base64 -d > dist/StickyNote/usr/share/icons/hicolor/256x256/apps/StickyNote.png
-          ln -s usr/share/icons/hicolor/256x256/apps/StickyNote.png dist/StickyNote/StickyNote.png
+          # 2. Generate desktop entry directly in AppDir root
+          cat << 'EOF' > dist/StickyNote/StickyNote.desktop
+  [Desktop Entry]
+  Type=Application
+  Name=StickyNote
+  Exec=StickyNote
+  Icon=StickyNote
+  Categories=Utility;
+  EOF
+  
+  # 3. Generate valid PNG icon via Python (bypasses shell base64 syntax issues)
+  python3 -c "import base64; open('dist/StickyNote/StickyNote.png', 'wb').write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='))"
+  
+  # 4. Generate AppRun execution wrapper directly in AppDir root
+  cat << 'EOF' > dist/StickyNote/AppRun
+  #!/bin/sh
+  HERE="$(dirname "$(readlink -f "${0}")")"
+  exec "$HERE/bin/StickyNote" "$@"
+  EOF
+  chmod +x dist/StickyNote/AppRun
+  
+  # 5. Fetch pinned appimagetool binary and package AppImage
+  curl -sSL https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -o appimagetool
+  chmod +x appimagetool
+  ./appimagetool --appimage-extract
+  ARCH=x86_64 ./squashfs-root/AppRun dist/StickyNote dist/StickyNote.AppImage
 
-          # 4. Generate AppRun execution wrapper
-          echo '#!/bin/sh' > dist/StickyNote/AppRun
-          echo 'HERE="$(dirname "$(readlink -f "${0}")")"' >> dist/StickyNote/AppRun
-          echo 'exec "$HERE/bin/StickyNote" "$@"' >> dist/StickyNote/AppRun
-          chmod +x dist/StickyNote/AppRun
-
-          # 5. Extract appimagetool and generate clean StickyNote.AppImage
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
-          ./appimagetool-x86_64.AppImage --appimage-extract
-          ARCH=x86_64 ./squashfs-root/AppRun dist/StickyNote dist/StickyNote.AppImage
-
-      - name: Upload Installer to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/${{ matrix.artifact }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+- name: Upload Installer to Release
+  uses: softprops/action-gh-release@v2
+  with:
+    files: dist/${{ matrix.artifact }}
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
