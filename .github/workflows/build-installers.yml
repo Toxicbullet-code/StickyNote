@@ -57,10 +57,14 @@ jobs:
       - name: Build Linux AppImage
         if: matrix.os == 'ubuntu-latest'
         run: |
-          # 1. Create app directory structure via jpackage
+          # 1. Install squashfs-tools (required by appimagetool on Ubuntu 24.04)
+          sudo apt-get update -qq
+          sudo apt-get install -y squashfs-tools
+
+          # 2. Build app directory via jpackage
           jpackage --type app-image --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
 
-          # 2. Setup desktop entry, icon, and AppRun inside dist/StickyNote
+          # 3. Create desktop entry, icon, and launcher inside AppDir
           echo "[Desktop Entry]" > dist/StickyNote/StickyNote.desktop
           echo "Type=Application" >> dist/StickyNote/StickyNote.desktop
           echo "Name=StickyNote" >> dist/StickyNote/StickyNote.desktop
@@ -75,12 +79,12 @@ jobs:
           echo 'exec "$HERE/bin/StickyNote" "$@"' >> dist/StickyNote/AppRun
           chmod +x dist/StickyNote/AppRun
 
-          # 3. Download appimagetool and unpack directly
+          # 4. Download and extract appimagetool
           curl -sSL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
           chmod +x appimagetool
           ./appimagetool --appimage-extract
 
-          # 4. Execute extracted tool directly (no FUSE or /tmp mount required)
+          # 5. Pack AppImage using mksquashfs
           export ARCH=x86_64
           ./squashfs-root/AppRun -n dist/StickyNote dist/StickyNote.AppImage
 
