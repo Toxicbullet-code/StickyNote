@@ -57,39 +57,34 @@ jobs:
       - name: Build Linux AppImage
         if: matrix.os == 'ubuntu-latest'
         run: |
-          # 1. Create app directory structure via jpackage
+          # 1. Install FUSE & SquashFS system libraries on runner
+          sudo apt-get update -qq
+          sudo apt-get install -y libfuse2 squashfs-tools
+
+          # 2. Generate raw app directory structure via jpackage
           jpackage --type app-image --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
 
-          # 2. Generate desktop entry directly in AppDir root
-          cat << 'EOF' > dist/StickyNote/StickyNote.desktop
-  [Desktop Entry]
-  Type=Application
-  Name=StickyNote
-  Exec=StickyNote
-  Icon=StickyNote
-  Categories=Utility;
-  EOF
-  
-  # 3. Generate valid PNG icon via Python (bypasses shell base64 syntax issues)
-  python3 -c "import base64; open('dist/StickyNote/StickyNote.png', 'wb').write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='))"
-  
-  # 4. Generate AppRun execution wrapper directly in AppDir root
-  cat << 'EOF' > dist/StickyNote/AppRun
-  #!/bin/sh
-  HERE="$(dirname "$(readlink -f "${0}")")"
-  exec "$HERE/bin/StickyNote" "$@"
-  EOF
-  chmod +x dist/StickyNote/AppRun
-  
-  # 5. Fetch pinned appimagetool binary and package AppImage
-  curl -sSL https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -o appimagetool
-  chmod +x appimagetool
-  ./appimagetool --appimage-extract
-  ARCH=x86_64 ./squashfs-root/AppRun dist/StickyNote dist/StickyNote.AppImage
+          # 3. Create desktop entry file directly inside AppDir root
+          printf "[Desktop Entry]\nType=Application\nName=StickyNote\nExec=StickyNote\nIcon=StickyNote\nCategories=Utility;\n" > dist/StickyNote/StickyNote.desktop
 
-- name: Upload Installer to Release
-  uses: softprops/action-gh-release@v2
-  with:
-    files: dist/${{ matrix.artifact }}
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 4. Write valid PNG icon header via Python
+          python3 -c "import base64; open('dist/StickyNote/StickyNote.png', 'wb').write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='))"
+
+          # 5. Create AppRun entrypoint script
+          printf '#!/bin/sh\nHERE="$(dirname "$(readlink -f "${0}")")"\nexec "$HERE/bin/StickyNote" "$@"\n' > dist/StickyNote/AppRun
+          chmod +x dist/StickyNote/AppRun
+
+          # 6. Download appimagetool, extract squashfs payload, and generate AppImage
+          curl -sSL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
+          chmod +x appimagetool
+
+          ./appimagetool --appimage-extract
+          export ARCH=x86_64
+          ./squashfs-root/AppRun dist/StickyNote dist/StickyNote.AppImage
+
+      - name: Upload Installer to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.artifact }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
