@@ -69,7 +69,7 @@ jobs:
           # 3. Create desktop entry, icon, and launcher inside AppDir
           printf "[Desktop Entry]\nType=Application\nName=StickyNote\nExec=StickyNote\nIcon=StickyNote\nCategories=Utility;\n" > dist/StickyNote/StickyNote.desktop
 
-          python3 -c "import zlib, struct; buf = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x03\x00\x05\xfe\x02\xfe\xa7\x56\xca\x84\x00\x00\x00\x00IEND\xaeB`\x82'; open('dist/StickyNote/StickyNote.png', 'wb').write(buf)"
+          python3 -c "import base64; open('dist/StickyNote/StickyNote.png', 'wb').write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='))"
 
           printf '#!/bin/sh\nHERE="$(dirname "$(readlink -f "${0}")")"\nexec "$HERE/bin/StickyNote" "$@"\n' > dist/StickyNote/AppRun
           chmod +x dist/StickyNote/AppRun
