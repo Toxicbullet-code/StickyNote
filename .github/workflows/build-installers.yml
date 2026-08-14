@@ -57,10 +57,10 @@ jobs:
       - name: Build Linux AppImage
         if: matrix.os == 'ubuntu-latest'
         run: |
-          # 1. Generate app directory structure via jpackage
+          # 1. Create app directory structure via jpackage
           jpackage --type app-image --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
 
-          # 2. Generate desktop entry
+          # 2. Setup desktop entry, icon, and AppRun inside dist/StickyNote
           echo "[Desktop Entry]" > dist/StickyNote/StickyNote.desktop
           echo "Type=Application" >> dist/StickyNote/StickyNote.desktop
           echo "Name=StickyNote" >> dist/StickyNote/StickyNote.desktop
@@ -68,21 +68,21 @@ jobs:
           echo "Icon=StickyNote" >> dist/StickyNote/StickyNote.desktop
           echo "Categories=Utility;" >> dist/StickyNote/StickyNote.desktop
 
-          # 3. Create PNG icon header via Python
           python3 -c "import base64; open('dist/StickyNote/StickyNote.png', 'wb').write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='))"
 
-          # 4. Create AppRun launcher
           echo '#!/bin/sh' > dist/StickyNote/AppRun
           echo 'HERE="$(dirname "$(readlink -f "${0}")")"' >> dist/StickyNote/AppRun
           echo 'exec "$HERE/bin/StickyNote" "$@"' >> dist/StickyNote/AppRun
           chmod +x dist/StickyNote/AppRun
 
-          # 5. Fetch appimagetool and package using extract-and-run mode (bypasses FUSE)
+          # 3. Download appimagetool and unpack directly
           curl -sSL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
           chmod +x appimagetool
-          export APPIMAGE_EXTRACT_AND_RUN=1
+          ./appimagetool --appimage-extract
+
+          # 4. Execute extracted tool directly (no FUSE or /tmp mount required)
           export ARCH=x86_64
-          ./appimagetool -n dist/StickyNote dist/StickyNote.AppImage
+          ./squashfs-root/AppRun -n dist/StickyNote dist/StickyNote.AppImage
 
       - name: Upload Installer to Release
         uses: softprops/action-gh-release@v2
