@@ -1,0 +1,72 @@
+name: Build Native Desktop Installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+          - os: macos-latest
+          - os: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Compile Java Code & Build JAR
+        run: |
+          mkdir -p out
+          javac -d out src/*.java
+          jar cfe StickyNote.jar Main -C out .
+
+      # Windows Build (.msi)
+      - name: Generate Windows Installer (.msi)
+        if: matrix.os == 'windows-latest'
+        run: |
+          jpackage --type msi --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --win-shortcut --win-menu --dest dist/
+
+      # macOS Build (.dmg)
+      - name: Generate Mac Installer (.dmg)
+        if: matrix.os == 'macos-latest'
+        run: |
+          jpackage --type dmg --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
+
+      # Linux AppImage Build (.AppImage)
+      - name: Generate Linux AppImage
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          jpackage --type app-image --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
+          
+          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          
+          mkdir -p dist/StickyNote/usr/share/applications
+          echo -e "[Desktop Entry]\nType=Application\nName=StickyNote\nExec=StickyNote\nIcon=utilities-notes\nCategories=Utility;" > dist/StickyNote/StickyNote.desktop
+
+          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run --appdir dist/StickyNote --output appimage
+          
+          mkdir -p dist_final
+          mv StickyNote*.AppImage dist_final/
+
+      - name: Upload Installers to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.msi
+            dist/*.dmg
+            dist_final/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
