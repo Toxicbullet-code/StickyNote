@@ -54,10 +54,14 @@ jobs:
       - name: Generate Linux AppImage
         if: matrix.os == 'ubuntu-latest'
         run: |
-          # 1. Ask jpackage for raw app directory structure
+          # 1. Install libfuse2 required by appimagetool
+          sudo apt-get update
+          sudo apt-get install -y libfuse2
+
+          # 2. Extract app-image structure from jpackage
           jpackage --type app-image --name StickyNote --input . --main-jar StickyNote.jar --main-class Main --dest dist/
           
-          # 2. Setup standard AppDir metadata
+          # 3. Setup desktop & entrypoint metadata
           mkdir -p dist/StickyNote/usr/share/applications
           echo -e "[Desktop Entry]\nType=Application\nName=StickyNote\nExec=StickyNote\nIcon=utilities-notes\nCategories=Utility;" > dist/StickyNote/StickyNote.desktop
           ln -s usr/share/applications/StickyNote.desktop dist/StickyNote/StickyNote.desktop
@@ -69,7 +73,7 @@ jobs:
           echo -e '#!/bin/sh\nHERE="$(dirname "$(readlink -f "${0}")")"\nexec "$HERE/bin/StickyNote" "$@"' > dist/StickyNote/AppRun
           chmod +x dist/StickyNote/AppRun
 
-          # 3. Use appimagetool to wrap into executable .AppImage
+          # 4. Fetch appimagetool and generate AppImage
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           ./appimagetool-x86_64.AppImage --appimage-extract-and-run dist/StickyNote StickyNote-x86_64.AppImage
